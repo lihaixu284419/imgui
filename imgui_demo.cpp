@@ -2991,12 +2991,13 @@ static void ShowDemoWindowMultiSelect()
 
             ImGui::Text("Added features:");
             ImGui::BulletText("Using ImGuiListClipper.");
+            ImGui::BulletText("Enabled Box-Selection.");
 
             const int ITEMS_COUNT = 10000;
             ImGui::Text("Selection: %d/%d", selection.Size, ITEMS_COUNT);
             if (ImGui::BeginListBox("##Basket", ImVec2(-FLT_MIN, ImGui::GetFontSize() * 20)))
             {
-                ImGuiMultiSelectFlags flags = ImGuiMultiSelectFlags_ClearOnEscape;
+                ImGuiMultiSelectFlags flags = ImGuiMultiSelectFlags_ClearOnEscape | ImGuiMultiSelectFlags_BoxSelect;
                 ImGuiMultiSelectIO* ms_io = ImGui::BeginMultiSelect(flags);
                 selection.ApplyRequests(ms_io, ITEMS_COUNT);
 
@@ -3179,7 +3180,7 @@ static void ShowDemoWindowMultiSelect()
             static bool use_drag_drop = true;
             static bool show_in_table = false;
             static bool show_color_button = false;
-            static ImGuiMultiSelectFlags flags = ImGuiMultiSelectFlags_None;
+            static ImGuiMultiSelectFlags flags = ImGuiMultiSelectFlags_ClearOnEscape | ImGuiMultiSelectFlags_BoxSelect;
             static WidgetType widget_type = WidgetType_Selectable;
 
             if (ImGui::RadioButton("Selectables", widget_type == WidgetType_Selectable)) { widget_type = WidgetType_Selectable; }
@@ -3193,7 +3194,7 @@ static void ShowDemoWindowMultiSelect()
             ImGui::CheckboxFlags("ImGuiMultiSelectFlags_SingleSelect", &flags, ImGuiMultiSelectFlags_SingleSelect);
             ImGui::CheckboxFlags("ImGuiMultiSelectFlags_NoSelectAll", &flags, ImGuiMultiSelectFlags_NoSelectAll);
             ImGui::CheckboxFlags("ImGuiMultiSelectFlags_BoxSelect", &flags, ImGuiMultiSelectFlags_BoxSelect);
-            ImGui::CheckboxFlags("ImGuiMultiSelectFlags_NoBoxSelectScroll", &flags, ImGuiMultiSelectFlags_NoBoxSelectScroll);
+            ImGui::CheckboxFlags("ImGuiMultiSelectFlags_BoxSelectNoScroll", &flags, ImGuiMultiSelectFlags_BoxSelectNoScroll);
             ImGui::CheckboxFlags("ImGuiMultiSelectFlags_ClearOnEscape", &flags, ImGuiMultiSelectFlags_ClearOnEscape);
             ImGui::CheckboxFlags("ImGuiMultiSelectFlags_ClearOnClickVoid", &flags, ImGuiMultiSelectFlags_ClearOnClickVoid);
             if (ImGui::CheckboxFlags("ImGuiMultiSelectFlags_ScopeWindow", &flags, ImGuiMultiSelectFlags_ScopeWindow) && (flags & ImGuiMultiSelectFlags_ScopeWindow))
@@ -9331,7 +9332,7 @@ struct ExampleAssetsBrowser
             ImGui::SetCursorScreenPos(start_pos);
 
             // Multi-select
-            ImGuiMultiSelectFlags ms_flags = ImGuiMultiSelectFlags_ClearOnEscape | ImGuiMultiSelectFlags_ClearOnClickVoid;
+            ImGuiMultiSelectFlags ms_flags = ImGuiMultiSelectFlags_ClearOnEscape | ImGuiMultiSelectFlags_ClearOnClickVoid;// | ImGuiMultiSelectFlags_BoxSelect;
             if (AllowDragUnselected)
                 ms_flags |= ImGuiMultiSelectFlags_SelectOnClickRelease; // To allow dragging an unselected item without altering selection.
             ImGuiMultiSelectIO* ms_io = ImGui::BeginMultiSelect(ms_flags);
