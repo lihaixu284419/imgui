@@ -1,217 +1,358 @@
-// Dear ImGui: standalone example application for GLFW + OpenGL 3, using programmable pipeline
-// (GLFW is a cross-platform general purpose library for handling windows, inputs, OpenGL/Vulkan/Metal graphics context creation, etc.)
+#include <SFML/Graphics.hpp>
+#include <imgui.h>
+#include <imgui-SFML.h>
+#include <iostream>
 
-// Learn about Dear ImGui:
-// - FAQ                  https://dearimgui.com/faq
-// - Getting Started      https://dearimgui.com/getting-started
-// - Documentation        https://dearimgui.com/docs (same as your local docs/ folder).
-// - Introduction, links and more at the top of imgui.cpp
+// 定义多项式结构体
+typedef struct PNode {
+    float coef;      // 系数
+    int expn;        // 指数
+    struct PNode* next; // 指针域
+} PNode, * polynomial;
 
-#include "imgui.h"
-#include "imgui_impl_glfw.h"
-#include "imgui_impl_opengl3.h"
-#include <stdio.h>
-#define GL_SILENCE_DEPRECATION
-#if defined(IMGUI_IMPL_OPENGL_ES2)
-#include <GLES2/gl2.h>
-#endif
-#include <GLFW/glfw3.h> // Will drag system OpenGL headers
-
-// [Win32] Our example includes a copy of glfw3.lib pre-compiled with VS2010 to maximize ease of testing and compatibility with old VS compilers.
-// To link with VS2010-era libraries, VS2015+ requires linking with legacy_stdio_definitions.lib, which we do using this pragma.
-// Your own project should not be affected, as you are likely to link with a newer binary of GLFW that is adequate for your version of Visual Studio.
-#if defined(_MSC_VER) && (_MSC_VER >= 1900) && !defined(IMGUI_DISABLE_WIN32_FUNCTIONS)
-#pragma comment(lib, "legacy_stdio_definitions")
-#endif
-
-// This example can also compile and run with Emscripten! See 'Makefile.emscripten' for details.
-#ifdef __EMSCRIPTEN__
-#include "../libs/emscripten/emscripten_mainloop_stub.h"
-#endif
-
-static void glfw_error_callback(int error, const char* description)
-{
-    fprintf(stderr, "GLFW Error %d: %s\n", error, description);
+// 创建多项式
+void creatlist(polynomial& p) {
+    // 输入n项的系数和指数，建立表示多项式的有序链表p
+    p = new PNode; // 为链表P1申请一个空间;
+    int n;
+    std::cout << "请输入多项式项数：";
+    std::cin >> n;
+    p->next = NULL; // 建立一个带头节点的单链表
+    polynomial t, q; // 用于标记位置
+    for (int i = 1; i <= n; i++) {
+        // 依次输入n个非零项，并将它们排序
+        polynomial s = new PNode; // 生成一个新节点，用于存储输入的系数和指数
+        std::cout << "请分别输入系数和指数: ";
+        std::cin >> s->coef >> s->expn; // 输入系数和指数
+        t = p; // t用于保存q的前驱，初值为头节点，为了让p只表示头节点
+        q = p->next; // q初始化，指向首元节点
+        while (q && q->expn < s->expn) {
+            // 从头到尾开始比较指数找到第一个大于输入指数的项*q
+            t = q;
+            q = q->next; // q指向下一个节点
+        } // while
+        s->next = q; // 将输入项s插入到q和其他前驱节点pre之间
+        t->next = s;
+    } // for
 }
 
-// Main code
-int main(int, char**)
-{
-    glfwSetErrorCallback(glfw_error_callback);
-    if (!glfwInit())
-        return 1;
+// 输出多项式
+void printout(polynomial p) {
+    int n = 0;
+    polynomial t = p;
+    while (t && (t = t->next)){
+        n++; // 多项式项数
+    } // while
+    p = p->next;
+    for (int i = 1; i < n; i++) {
+        if (p->coef != 0 && p->expn == 0) // 判断是否为常数项
+            std::cout << p->coef << "+";
+        else if (p->coef < 0) {
+            std::cout << "\b";
+            std::cout << p->coef << "x^" << p->expn << "+";
+        }
+        else
+            std::cout << p->coef << "x^" << p->expn << "+";
+        p = p->next;
+    }
+    // 单独输出最后一项
+    if (p->coef < 0) {
+        std::cout << "\b";
+        std::cout << p->coef << "x^" << p->expn;
+    }
+    else
+        std::cout << p->coef << "x^" << p->expn;
+}
 
-    // Decide GL+GLSL versions
-#if defined(IMGUI_IMPL_OPENGL_ES2)
-    // GL ES 2.0 + GLSL 100
-    const char* glsl_version = "#version 100";
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 2);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_ES_API);
-#elif defined(__APPLE__)
-    // GL 3.2 + GLSL 150
-    const char* glsl_version = "#version 150";
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);  // 3.2+ only
-    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);            // Required on Mac
-#else
-    // GL 3.0 + GLSL 130
-    const char* glsl_version = "#version 130";
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
-    //glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);  // 3.2+ only
-    //glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);            // 3.0+ only
-#endif
+// 多项式加法
+void add_polynomial(polynomial p1, polynomial p2) {
+    polynomial t = p1; // t指向p1的头节点
+    polynomial flag = t; // 用来标记p1的头节点
+    p1 = p1->next;
+    p2 = p2->next; // p1, p2分别指向首元节点
+    while (p1 && p2) {
+        if (p1->expn == p2->expn) {
+            p1->coef += p2->coef;
+            if (p1->coef) {
+                t->next = p1;
+                t = p1;
+                p1 = p1->next;
+                polynomial r = p2;
+                p2 = p2->next;
+                delete r;
+            }
+            else {
+                polynomial r = p1;
+                p1 = p1->next;
+                delete r;
+                polynomial rr = p2;
+                p2 = p2->next;
+                delete rr;
+            }
+        }
+        else if (p1->expn < p2->expn) {
+            t->next = p1;
+            t = p1;
+            p1 = p1->next;
+        }
+        else {
+            t->next = p2;
+            t = p2;
+            p2 = p2->next;
+        }
+    } // while
+    t->next = p1 ? p1 : p2;
+    std::cout << "相加的结果为：" << std::endl;
+    printout(flag);
+    delete p2;
+}
 
-    // Create window with graphics context
-    GLFWwindow* window = glfwCreateWindow(1280, 720, "Dear ImGui GLFW+OpenGL3 example", nullptr, nullptr);
-    if (window == nullptr)
-        return 1;
-    glfwMakeContextCurrent(window);
-    glfwSwapInterval(1); // Enable vsync
+// 多项式减法
+void subtruct_polynomial(polynomial p1, polynomial p2) {
+    polynomial t = p1; // t指向p1的头节点
+    polynomial flag = t; // 用来标记p1的头节点
+    p1 = p1->next;
+    p2 = p2->next; // p1, p2分别指向首元节点
+    while (p1 && p2) {
+        if (p1->expn == p2->expn) {
+            p1->coef -= p2->coef;
+            if (p1->coef) {
+                t->next = p1;
+                t = p1;
+                p1 = p1->next;
+                polynomial r = p2;
+                p2 = p2->next;
+                delete r;
+            }
+            else {
+                polynomial r = p1;
+                p1 = p1->next;
+                delete r;
+                polynomial rr = p2;
+                p2 = p2->next;
+                delete rr;
+            }
+        }
+        else if (p1->expn < p2->expn) {
+            t->next = p1;
+            t = p1;
+            p1 = p1->next;
+        }
+        else {
+            p2->coef *= -1;
+            t->next = p2;
+            t = p2;
+            p2 = p2->next;
+        }
+    } // while
+    if (p1)
+        t->next = p1;
+    if (p2)
+        while (p2) {
+            p2->coef *= -1;
+            t->next = p2;
+            t = p2;
+            p2 = p2->next;
+        }
+    std::cout << "相减的结果为：" << std::endl;
+    printout(flag);
+    delete p2;
+}
 
-    // Setup Dear ImGui context
-    IMGUI_CHECKVERSION();
-    ImGui::CreateContext();
-    ImGuiIO& io = ImGui::GetIO(); (void)io;
-    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
-    io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
-    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;         // Enable Docking
-    io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;       // Enable Multi-Viewport / Platform Windows
-    //io.ConfigViewportsNoAutoMerge = true;
-    //io.ConfigViewportsNoTaskBarIcon = true;
+// 排序函数
+void sort(polynomial p, polynomial head) {
+    p = head;
+    polynomial t1 = p->next;
+    polynomial t2 = p->next;
+    polynomial t3 = NULL;
+    float ct;
+    int et;
+    while (t2 != t3) {
+        while (t1->next != t3) {
+            if ((t1->expn) > (t1->next->expn)) {
+                ct = t1->coef;
+                t1->coef = t1->next->coef;
+                t1->next->coef = ct;
+                et = t1->expn;
+                t1->expn = t1->next->expn;
+                t1->next->expn = et;
+            }
+            t1 = t1->next;
+        }
+        t3 = t1;
+        t1 = p->next;
+    }
+}
 
-    // Setup Dear ImGui style
-    ImGui::StyleColorsDark();
-    //ImGui::StyleColorsLight();
+// 多项式乘法
+void multiply_polynomial(polynomial& p1, polynomial& p2) {
+    polynomial head2 = p2;
+    polynomial head = new PNode;
+    polynomial flag;
+    flag = head;
+    p1 = p1->next;
+    p2 = p2->next;
+    while (p1) {
+        while (p2) {
+            polynomial t = new PNode;
+            t->coef = p1->coef * p2->coef;
+            t->expn = p1->expn + p2->expn;
+            flag->next = t;
+            t->next = NULL;
+            flag = t;
+            p2 = p2->next;
+        }
+        p1 = p1->next;
+        p2 = head2->next;
+    }
+    sort(flag, head);
+    for (polynomial q = head->next; q && q->next;) {
+        if (q->expn == q->next->expn) {
+            q->coef += q->next->coef;
+            q->next = q->next->next;
+        }
+        else
+            q = q->next;
+    }
+    std::cout << "相乘的结果为：" << std::endl;
+    printout(head);
+}
 
-    // When viewports are enabled we tweak WindowRounding/WindowBg so platform windows can look identical to regular ones.
-    ImGuiStyle& style = ImGui::GetStyle();
-    if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
-    {
-        style.WindowRounding = 0.0f;
-        style.Colors[ImGuiCol_WindowBg].w = 1.0f;
+// 菜单函数
+void display() {
+    std::cout << "========================" << std::endl;
+    std::cout << "1.创建多项式" << std::endl;
+    std::cout << "2.多项式加法" << std::endl;
+    std::cout << "3.多项式减法" << std::endl;
+    std::cout << "4.多项式乘法" << std::endl;
+    std::cout << "0.退出" << std::endl;
+    std::cout << "========================" << std::endl;
+}
+
+// Function to draw the polynomial on the SFML window
+void drawPolynomial(sf::RenderWindow& window, polynomial p, sf::Color color, float startX, float endX) {
+    sf::VertexArray line(sf::LineStrip);
+
+    for (float x = startX; x <= endX; x += 0.1) {
+        float y = 0;
+        polynomial temp = p;
+
+        while (temp) {
+            y += temp->coef * pow(x, temp->expn);
+            temp = temp->next;
+        }
+
+        sf::Vertex point(sf::Vector2f(x * 50, y * 50), color);
+        line.append(point);
     }
 
-    // Setup Platform/Renderer backends
-    ImGui_ImplGlfw_InitForOpenGL(window, true);
-    ImGui_ImplOpenGL3_Init(glsl_version);
+    window.draw(line);
+}
 
-    // Load Fonts
-    // - If no fonts are loaded, dear imgui will use the default font. You can also load multiple fonts and use ImGui::PushFont()/PopFont() to select them.
-    // - AddFontFromFileTTF() will return the ImFont* so you can store it if you need to select the font among multiple.
-    // - If the file cannot be loaded, the function will return a nullptr. Please handle those errors in your application (e.g. use an assertion, or display an error and quit).
-    // - The fonts will be rasterized at a given size (w/ oversampling) and stored into a texture when calling ImFontAtlas::Build()/GetTexDataAsXXXX(), which ImGui_ImplXXXX_NewFrame below will call.
-    // - Use '#define IMGUI_ENABLE_FREETYPE' in your imconfig file to use Freetype for higher quality font rendering.
-    // - Read 'docs/FONTS.md' for more instructions and details.
-    // - Remember that in C/C++ if you want to include a backslash \ in a string literal you need to write a double backslash \\ !
-    // - Our Emscripten build process allows embedding fonts to be accessible at runtime from the "fonts/" folder. See Makefile.emscripten for details.
-    //io.Fonts->AddFontDefault();
-    //io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\segoeui.ttf", 18.0f);
-    //io.Fonts->AddFontFromFileTTF("../../misc/fonts/DroidSans.ttf", 16.0f);
-    //io.Fonts->AddFontFromFileTTF("../../misc/fonts/Roboto-Medium.ttf", 16.0f);
-    //io.Fonts->AddFontFromFileTTF("../../misc/fonts/Cousine-Regular.ttf", 15.0f);
-    //ImFont* font = io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\ArialUni.ttf", 18.0f, nullptr, io.Fonts->GetGlyphRangesJapanese());
-    //IM_ASSERT(font != nullptr);
-
-    // Our state
-    bool show_demo_window = true;
-    bool show_another_window = false;
-    ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
-
-    // Main loop
-#ifdef __EMSCRIPTEN__
-    // For an Emscripten build we are disabling file-system access, so let's not attempt to do a fopen() of the imgui.ini file.
-    // You may manually call LoadIniSettingsFromMemory() to load settings from your own storage.
-    io.IniFilename = nullptr;
-    EMSCRIPTEN_MAINLOOP_BEGIN
-#else
-    while (!glfwWindowShouldClose(window))
-#endif
-    {
-        // Poll and handle events (inputs, window resize, etc.)
-        // You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to tell if dear imgui wants to use your inputs.
-        // - When io.WantCaptureMouse is true, do not dispatch mouse input data to your main application, or clear/overwrite your copy of the mouse data.
-        // - When io.WantCaptureKeyboard is true, do not dispatch keyboard input data to your main application, or clear/overwrite your copy of the keyboard data.
-        // Generally you may always pass all inputs to dear imgui, and hide them from your application based on those two flags.
-        glfwPollEvents();
-
-        // Start the Dear ImGui frame
-        ImGui_ImplOpenGL3_NewFrame();
-        ImGui_ImplGlfw_NewFrame();
-        ImGui::NewFrame();
-
-        // 1. Show the big demo window (Most of the sample code is in ImGui::ShowDemoWindow()! You can browse its code to learn more about Dear ImGui!).
-        if (show_demo_window)
-            ImGui::ShowDemoWindow(&show_demo_window);
-
-        // 2. Show a simple window that we create ourselves. We use a Begin/End pair to create a named window.
-        {
-            static float f = 0.0f;
-            static int counter = 0;
-
-            ImGui::Begin("Hello, world!");                          // Create a window called "Hello, world!" and append into it.
-
-            ImGui::Text("This is some useful text.");               // Display some text (you can use a format strings too)
-            ImGui::Checkbox("Demo Window", &show_demo_window);      // Edit bools storing our window open/close state
-            ImGui::Checkbox("Another Window", &show_another_window);
-
-            ImGui::SliderFloat("float", &f, 0.0f, 1.0f);            // Edit 1 float using a slider from 0.0f to 1.0f
-            ImGui::ColorEdit3("clear color", (float*)&clear_color); // Edit 3 floats representing a color
-
-            if (ImGui::Button("Button"))                            // Buttons return true when clicked (most widgets return true when edited/activated)
-                counter++;
-            ImGui::SameLine();
-            ImGui::Text("counter = %d", counter);
-
-            ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
-            ImGui::End();
-        }
-
-        // 3. Show another simple window.
-        if (show_another_window)
-        {
-            ImGui::Begin("Another Window", &show_another_window);   // Pass a pointer to our bool variable (the window will have a closing button that will clear the bool when clicked)
-            ImGui::Text("Hello from another window!");
-            if (ImGui::Button("Close Me"))
-                show_another_window = false;
-            ImGui::End();
-        }
-
-        // Rendering
-        ImGui::Render();
-        int display_w, display_h;
-        glfwGetFramebufferSize(window, &display_w, &display_h);
-        glViewport(0, 0, display_w, display_h);
-        glClearColor(clear_color.x * clear_color.w, clear_color.y * clear_color.w, clear_color.z * clear_color.w, clear_color.w);
-        glClear(GL_COLOR_BUFFER_BIT);
-        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-
-        // Update and Render additional Platform Windows
-        // (Platform functions may change the current OpenGL context, so we save/restore it to make it easier to paste this code elsewhere.
-        //  For this specific demo app we could also call glfwMakeContextCurrent(window) directly)
-        if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
-        {
-            GLFWwindow* backup_current_context = glfwGetCurrentContext();
-            ImGui::UpdatePlatformWindows();
-            ImGui::RenderPlatformWindowsDefault();
-            glfwMakeContextCurrent(backup_current_context);
-        }
-
-        glfwSwapBuffers(window);
+// Function to destroy the polynomial and free memory
+void destroyPolynomial(polynomial& p) {
+    polynomial temp;
+    while (p) {
+        temp = p;
+        p = p->next;
+        delete temp;
+        temp = nullptr;  // 将 temp 设置为 nullptr，防止悬挂指针问题
     }
-#ifdef __EMSCRIPTEN__
-    EMSCRIPTEN_MAINLOOP_END;
-#endif
+}
 
-    // Cleanup
-    ImGui_ImplOpenGL3_Shutdown();
-    ImGui_ImplGlfw_Shutdown();
-    ImGui::DestroyContext();
+int main() {
+    // SFML window setup
+    sf::RenderWindow window(sf::VideoMode(800, 600), "Polynomial Calculator");
+    ImGui::SFML::Init(window);
+    ImGuiIO& io = ImGui::GetIO();
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;  // Enable Keyboard Controls
 
-    glfwDestroyWindow(window);
-    glfwTerminate();
+    int n;
+    polynomial p1 = nullptr;
+    polynomial p2 = nullptr;
+
+    char buffer1[256] = "";
+    char buffer2[256] = "";
+
+    display();
+
+    while (window.isOpen()) {
+        sf::Event event;
+        while (window.pollEvent(event)) {
+            if (event.type == sf::Event::Closed) {
+                window.close();
+            }
+
+            ImGui::SFML::ProcessEvent(event);
+        }
+
+        ImGui::SFML::Update(window, sf::seconds(0.0f));
+
+        std::cout << "请输入要执行的操作：";
+        std::cin >> n;
+
+        switch (n) {
+        case 1:
+            // Create polynomials using ImGui for input
+            ImGui::Begin("Polynomial Input");
+            ImGui::InputText("Polynomial 1", buffer1, sizeof(buffer1));
+            ImGui::InputText("Polynomial 2", buffer2, sizeof(buffer2));
+            if (ImGui::Button("Submit")) {
+                // Parse buffer1 and buffer2 to create polynomials p1 and p2
+                // (You need to implement a function to parse the input strings)
+                // Example: parseInput(buffer1, p1);
+                // Example: parseInput(buffer2, p2);
+                std::cout << "第一个多项式为：";
+                printout(p1);
+                std::cout << std::endl;
+                std::cout << "第二个多项式为：";
+                printout(p2);
+                std::cout << std::endl;
+
+                ImGui::End();
+                break;
+            }
+            ImGui::End();
+            break;
+        case 2:
+            // 多项式相加
+            add_polynomial(p1, p2);
+            std::cout << std::endl;
+            break;
+        case 3:
+            // 多项式减法
+            subtruct_polynomial(p1, p2);
+            std::cout << std::endl;
+            break;
+        case 4:
+            // 多项式相乘
+            multiply_polynomial(p1, p2);
+            std::cout << std::endl;
+            break;
+        case 0:
+            // Deallocate memory and exit
+            destroyPolynomial(p1);
+            destroyPolynomial(p2);
+            window.close();
+            break;
+        default:
+            std::cout << "输入不合法，请重新输入！" << std::endl;
+            std::cout << std::endl;
+            break;
+        }
+
+        // Draw the polynomials on the SFML window
+        window.clear();
+        drawPolynomial(window, p1, sf::Color::Red, -10, 10);
+        drawPolynomial(window, p2, sf::Color::Blue, -10, 10);
+
+        ImGui::SFML::Render(window);
+        window.display();
+    }
+
+    ImGui::SFML::Shutdown();
+    destroyPolynomial(p1);
+    destroyPolynomial(p2);
 
     return 0;
 }
